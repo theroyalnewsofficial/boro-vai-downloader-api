@@ -11,9 +11,8 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 @app.route('/')
 def home():
     return jsonify({
-        "status": "Boro Vai Downloader API Running 🔥",
-        "version": "PRO v5 - Final",
-        "endpoints": ["/info", "/download"]
+        "status": "Boro Vai Downloader API Running 🔥 FIXED",
+        "version": "PRO v6 - Final Fixed"
     })
 
 @app.route('/info', methods=['POST', 'OPTIONS'])
@@ -26,7 +25,18 @@ def get_info():
         if not url:
             return jsonify({"error": "URL missing"}), 400
         
-        ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            },
+            'nocheckcertificate': True,
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return jsonify({
@@ -37,6 +47,7 @@ def get_info():
                 "view_count": info.get('view_count')
             })
     except Exception as e:
+        print(f"Info Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/download', methods=['POST', 'OPTIONS'])
@@ -64,28 +75,33 @@ def download():
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
                 }],
-                'quiet': True
+                'quiet': True,
+                'extractor_args': {
+                    'youtube': {'player_client': ['android']}
+                },
+                'nocheckcertificate': True,
             }
         else:
-            # For video
             ydl_opts = {
                 'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best',
                 'outtmpl': f'{output_path}.%(ext)s',
                 'merge_output_format': 'mp4',
-                'quiet': True
+                'quiet': True,
+                'extractor_args': {
+                    'youtube': {'player_client': ['android', 'web']}
+                },
+                'nocheckcertificate': True,
             }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             
-            # Find downloaded file
             files = glob.glob(f'{output_path}.*')
             if not files:
                 return jsonify({"error": "File not found after download"}), 500
             
             filepath = files[0]
             title = info.get('title', 'video')
-            # Clean title for filename
             safe_title = "".join([c for c in title if c.isalnum() or c in (' ', '-', '_')]).strip()[:50]
             ext = filepath.split('.')[-1]
             download_name = f"{safe_title}.{ext}"
@@ -93,7 +109,9 @@ def download():
             return send_file(filepath, as_attachment=True, download_name=download_name)
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Download Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
